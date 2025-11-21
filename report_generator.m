@@ -25,6 +25,13 @@ function generateWordReport(outputPath, reportTitle, sections, options)
 %         - Company     : company name for document properties.
 %         - FooterText  : footer string printed on each page.
 %         - AddPageNums : logical flag to insert page numbers (default true).
+%         - HeadingFont : struct with Name/Size for headings (defaults Arial/16).
+%         - BodyFont    : struct with Name/Size for body text (Arial/11).
+%         - LineSpacing : multiple line spacing value (e.g., 1.15).
+%         - SpaceBefore : paragraph space before in points (default 6).
+%         - SpaceAfter  : paragraph space after in points (default 6).
+%         - Margins     : struct with Top/Bottom/Left/Right in points (72 = 1");
+%         - TableStyle  : built-in Word table style name (default 'Table Grid').
 %
 %   Example
 %   -------
@@ -50,6 +57,46 @@ if ~isfield(options, 'AddPageNums')
     options.AddPageNums = true;
 end
 
+if ~isfield(options, 'HeadingFont') || ~isfield(options.HeadingFont, 'Name')
+    options.HeadingFont.Name = 'Arial';
+end
+if ~isfield(options.HeadingFont, 'Size')
+    options.HeadingFont.Size = 16;
+end
+if ~isfield(options, 'BodyFont') || ~isfield(options.BodyFont, 'Name')
+    options.BodyFont.Name = 'Arial';
+end
+if ~isfield(options.BodyFont, 'Size')
+    options.BodyFont.Size = 11;
+end
+if ~isfield(options, 'LineSpacing')
+    options.LineSpacing = 1.15; % multiple spacing (1 = single)
+end
+if ~isfield(options, 'SpaceBefore')
+    options.SpaceBefore = 6;
+end
+if ~isfield(options, 'SpaceAfter')
+    options.SpaceAfter = 6;
+end
+if ~isfield(options, 'Margins')
+    options.Margins = struct;
+end
+if ~isfield(options.Margins, 'Top')
+    options.Margins.Top = 72; % 1 inch
+end
+if ~isfield(options.Margins, 'Bottom')
+    options.Margins.Bottom = 72;
+end
+if ~isfield(options.Margins, 'Left')
+    options.Margins.Left = 72;
+end
+if ~isfield(options.Margins, 'Right')
+    options.Margins.Right = 72;
+end
+if ~isfield(options, 'TableStyle')
+    options.TableStyle = 'Table Grid';
+end
+
 word = actxserver('Word.Application');
 set(word, 'Visible', 0);  % keep hidden for automation
 
@@ -57,9 +104,10 @@ try
     doc = createDocument(word, options);
     setDocumentProperties(doc, options);
     selection = get(word, 'Selection');
+    configurePageSetup(word, options);
 
     addCoverPage(selection, reportTitle, options);
-    addBodyContent(selection, sections);
+    addBodyContent(selection, sections, options);
     addFooterAndNumbers(doc, options);
 
     invoke(doc, 'SaveAs', outputPath);
@@ -100,79 +148,108 @@ end
 end
 
 %-------------------------------------------------------------------------%
-function addCoverPage(selection, reportTitle, options)
-%ADDCOVERPAGE Simple centered cover page with title and optional footer.
-invoke(selection, 'WholeStory');
-invoke(selection, 'Delete');
-
-set(selection, 'Alignment', 1); % wdAlignParagraphCenter
-set(selection.Font, 'Name', 'Arial');
-set(selection.Font, 'Size', 24);
-invoke(selection, 'TypeText', reportTitle);
-invoke(selection, 'TypeParagraph');
-
-set(selection.Font, 'Size', 12);
-if isfield(options, 'Author') && ~isempty(options.Author)
-    invoke(selection, 'TypeText', ['Author: ' options.Author]);
-    invoke(selection, 'TypeParagraph');
-end
-if isfield(options, 'Company') && ~isempty(options.Company)
-    invoke(selection, 'TypeText', ['Company: ' options.Company]);
-    invoke(selection, 'TypeParagraph');
-end
-invoke(selection, 'InsertBreak', 3); % wdPageBreak
+function configurePageSetup(word, options)
+%CONFIGUREPAGESETUP Apply margin settings to the active document.
+doc = get(word, 'ActiveDocument');
+pageSetup = get(doc, 'PageSetup');
+set(pageSetup, 'TopMargin', options.Margins.Top);
+set(pageSetup, 'BottomMargin', options.Margins.Bottom);
+set(pageSetup, 'LeftMargin', options.Margins.Left);
+set(pageSetup, 'RightMargin', options.Margins.Right);
 end
 
 %-------------------------------------------------------------------------%
-function addBodyContent(selection, sections)
-%ADDBODYCONTENT Iterate over the section structs and emit content.
-if nargin < 2 || isempty(sections)
-    return;
+function applyParagraphFormatting(selection, options, alignment)
+%APPLYPARAGRAPHFORMATTING Set alignment, spacing, and line spacing on the selection.
+paraFormat = get(selection, 'ParagraphFormat');
+if nargin >= 3
+    set(paraFormat, 'Alignment', alignment);
+end
+set(paraFormat, 'LineSpacingRule', 5); % wdLineSpaceMultiple
+set(paraFormat, 'LineSpacing', options.LineSpacing * 12);
+set(paraFormat, 'SpaceBefore', options.SpaceBefore);
+set(paraFormat, 'SpaceAfter', options.SpaceAfter);
 end
 
-for k = 1:numel(sections)
-    section = sections(k);
+%-------------------------------------------------------------------------%
+function addCoverPage(selection, reportTitle, options)
+%ADDCOVERPAGE Simple centered cover page with title and optional footer.
+    invoke(selection, 'WholeStory');
+    invoke(selection, 'Delete');
 
-    if isfield(section, 'Title') && ~isempty(section.Title)
-        set(selection, 'Alignment', 0); % wdAlignParagraphLeft
-        set(selection.Font, 'Size', 16);
-        set(selection.Font, 'Bold', 1);
-        invoke(selection, 'TypeText', section.Title);
-        invoke(selection, 'TypeParagraph');
-    end
+    applyParagraphFormatting(selection, options, 1); % wdAlignParagraphCenter
+    set(selection.Font, 'Name', options.HeadingFont.Name);
+    set(selection.Font, 'Size', options.HeadingFont.Size);
+    set(selection.Font, 'Bold', 1);
+    invoke(selection, 'TypeText', reportTitle);
+    invoke(selection, 'TypeParagraph');
 
     set(selection.Font, 'Bold', 0);
-    set(selection.Font, 'Size', 11);
+    set(selection.Font, 'Name', options.BodyFont.Name);
+    set(selection.Font, 'Size', options.BodyFont.Size);
+    if isfield(options, 'Author') && ~isempty(options.Author)
+        invoke(selection, 'TypeText', ['Author: ' options.Author]);
+        invoke(selection, 'TypeParagraph');
+    end
+    if isfield(options, 'Company') && ~isempty(options.Company)
+        invoke(selection, 'TypeText', ['Company: ' options.Company]);
+        invoke(selection, 'TypeParagraph');
+    end
+    invoke(selection, 'InsertBreak', 3); % wdPageBreak
+end
 
-    if isfield(section, 'Paragraphs') && ~isempty(section.Paragraphs)
-        for p = 1:numel(section.Paragraphs)
-            invoke(selection, 'TypeText', section.Paragraphs{p});
-            invoke(selection, 'TypeParagraph');
-            invoke(selection, 'TypeParagraph');
-        end
+%-------------------------------------------------------------------------%
+function addBodyContent(selection, sections, options)
+%ADDBODYCONTENT Iterate over the section structs and emit content.
+    if nargin < 2 || isempty(sections)
+        return;
     end
 
-    if isfield(section, 'Bullets') && ~isempty(section.Bullets)
-        for b = 1:numel(section.Bullets)
+    for k = 1:numel(sections)
+        section = sections(k);
+
+        if isfield(section, 'Title') && ~isempty(section.Title)
+            applyParagraphFormatting(selection, options, 0); % wdAlignParagraphLeft
+            set(selection.Font, 'Name', options.HeadingFont.Name);
+            set(selection.Font, 'Size', options.HeadingFont.Size);
+            set(selection.Font, 'Bold', 1);
+            invoke(selection, 'TypeText', section.Title);
+            invoke(selection, 'TypeParagraph');
+        end
+
+        set(selection.Font, 'Bold', 0);
+        set(selection.Font, 'Name', options.BodyFont.Name);
+        set(selection.Font, 'Size', options.BodyFont.Size);
+        applyParagraphFormatting(selection, options, 0);
+
+        if isfield(section, 'Paragraphs') && ~isempty(section.Paragraphs)
+            for p = 1:numel(section.Paragraphs)
+                invoke(selection, 'TypeText', section.Paragraphs{p});
+                invoke(selection, 'TypeParagraph');
+            end
+        end
+
+        if isfield(section, 'Bullets') && ~isempty(section.Bullets)
+            for b = 1:numel(section.Bullets)
             invoke(selection, 'TypeText', ['• ' section.Bullets{b}]);
             invoke(selection, 'TypeParagraph');
         end
         invoke(selection, 'TypeParagraph');
-    end
-
-    if isfield(section, 'Tables') && ~isempty(section.Tables)
-        for t = 1:numel(section.Tables)
-            addTable(selection, section.Tables(t));
-            invoke(selection, 'TypeParagraph');
         end
-    end
+
+        if isfield(section, 'Tables') && ~isempty(section.Tables)
+            for t = 1:numel(section.Tables)
+                addTable(selection, section.Tables(t), options);
+                invoke(selection, 'TypeParagraph');
+            end
+        end
 
     invoke(selection, 'InsertBreak', 7); % wdSectionBreakContinuous
 end
 end
 
 %-------------------------------------------------------------------------%
-function addTable(selection, tbl)
+function addTable(selection, tbl, options)
 %ADDTABLE Insert a simple table with optional header row.
 if ~isfield(tbl, 'Rows') || isempty(tbl.Rows)
     return;
@@ -187,6 +264,9 @@ end
 range = get(selection, 'Range');
 tables = get(selection, 'Tables');
 wordTable = invoke(tables, 'Add', range, rows, cols);
+set(wordTable, 'Style', options.TableStyle);
+set(wordTable.Range.Font, 'Name', options.BodyFont.Name);
+set(wordTable.Range.Font, 'Size', options.BodyFont.Size);
 
 rowIndex = 1;
 if isfield(tbl, 'Header') && ~isempty(tbl.Header)
