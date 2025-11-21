@@ -18,6 +18,8 @@ function generateWordReport(outputPath, reportTitle, sections, options)
 %         - Bullets (cell)     : bullet list items (optional).
 %         - Tables (struct)    : optional struct array with fields
 %                                Header (cell) and Rows (cell matrix).
+%         - Figures (struct)   : optional struct array with fields
+%                                Path (char), Caption (char), RowIndex (int).
 %   options : struct (optional)
 %       Optional settings to refine the document appearance:
 %         - Template    : path to a .dot/.dotx template file.
@@ -244,6 +246,10 @@ function addBodyContent(selection, sections, options)
             end
         end
 
+        if isfield(section, 'Figures') && ~isempty(section.Figures)
+            addFigures(selection, section.Figures);
+        end
+
     invoke(selection, 'InsertBreak', 7); % wdSectionBreakContinuous
 end
 end
@@ -291,6 +297,61 @@ invoke(wordTable, 'AutoFitBehavior', 2); % wdAutoFitContent
 rangeAfter = wordTable.Range;
 set(rangeAfter, 'Collapse', 0); % wdCollapseEnd
 invoke(rangeAfter, 'Select');
+end
+
+%-------------------------------------------------------------------------%
+function addFigures(selection, figures)
+%ADDFIGURES Group figures by row and insert them with captions.
+if nargin < 2 || isempty(figures)
+    return;
+end
+
+rowIndices = ones(1, numel(figures));
+for idx = 1:numel(figures)
+    if isfield(figures(idx), 'RowIndex') && ~isempty(figures(idx).RowIndex)
+        rowIndices(idx) = figures(idx).RowIndex;
+    end
+end
+
+uniqueRows = unique(rowIndices);
+for r = 1:numel(uniqueRows)
+    currentFigures = figures(rowIndices == uniqueRows(r));
+    addFigureRow(selection, currentFigures);
+end
+end
+
+%-------------------------------------------------------------------------%
+function addFigureRow(selection, figureRow)
+%ADDFIGUREROW Lay out a set of figures across a single table row.
+if isempty(figureRow)
+    return;
+end
+
+range = get(selection, 'Range');
+tables = get(selection, 'Tables');
+wordTable = invoke(tables, 'Add', range, 1, numel(figureRow));
+set(wordTable.Borders, 'Enable', 0);
+
+for c = 1:numel(figureRow)
+    cellObj = invoke(wordTable, 'Cell', 1, c);
+    cellRange = get(cellObj, 'Range');
+    inlineShapes = get(cellRange, 'InlineShapes');
+    invoke(inlineShapes, 'AddPicture', figureRow(c).Path, 0, 1);
+
+    set(cellRange, 'Collapse', 0); % wdCollapseEnd
+    invoke(cellRange, 'Select');
+
+    captionText = '';
+    if isfield(figureRow(c), 'Caption') && ~isempty(figureRow(c).Caption)
+        captionText = [' ' figureRow(c).Caption];
+    end
+    invoke(selection, 'InsertCaption', 'Figure', captionText);
+end
+
+rangeAfter = wordTable.Range;
+set(rangeAfter, 'Collapse', 0); % wdCollapseEnd
+invoke(rangeAfter, 'Select');
+invoke(selection, 'TypeParagraph');
 end
 
 %-------------------------------------------------------------------------%
