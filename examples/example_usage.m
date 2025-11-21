@@ -7,6 +7,8 @@ sections(1).Title = '项目概览';
 sections(1).Paragraphs = {'本报告由MATLAB自动生成，用于展示样例格式。', ...
     '可根据需要替换为正式内容。'};
 sections(1).Bullets = {'需求梳理完成', '方案评审通过', '关键里程碑已确认'};
+sections(1).Figures = struct('Path', {'C:\\temp\\sample.png'}, ...
+    'Caption', {'示例图片'}, 'RowIndex', {1});
 
 sections(2).Title = '数据汇总';
 sections(2).Tables(1).Header = {'指标', '取值'};
