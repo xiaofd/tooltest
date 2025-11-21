@@ -1,8 +1,8 @@
-%EXAMPLE_USAGE Build a sample report using generateWordReport.
+% 示例：使用 generateWordReport 构建示例报告。
 %
-% Update the output path before running. Word must be installed on Windows.
+% 运行前请确认 Word 已安装，并根据实际情况调整输出与模板路径。
 
-% Configure sections
+% 配置章节内容（段落、列表、图片、表格）
 sections(1).Title = '项目概览';
 sections(1).Paragraphs = {'本报告由MATLAB自动生成，用于展示样例格式。', ...
     '可根据需要替换为正式内容。'};
@@ -17,13 +17,26 @@ sections(2).Tables(1).Rows = { ...
     '响应时间', '120 ms'; ...
     '错误率', '0.01%'};
 
-% Optional configuration
+% 占位符示例：可在 Word 模板中放置 {{placeholder_name}} 并在此替换
+options.Placeholders.project_name = '智慧工厂试点';
+options.Placeholders.dynamic_table.Header = {'部门', '负责人'};
+options.Placeholders.dynamic_table.Rows = {'研发部', '李雷'; '交付部', '韩梅'};
+options.Placeholders.dynamic_figures = struct('Path', {'C:\\temp\\logo.png'}, ...
+    'Caption', {'动态插入的图例'}, 'RowIndex', {1});
+
+% 可选配置：模板、页边距、行距、页眉页脚等
+options.Template = 'C:\\temp\\report_template.dotx';
 options.Author = '自动化脚本';
 options.Company = '示例团队';
 options.FooterText = '保密 - 内部使用';
-options.AddPageNums = true;
+options.AddPageNums = true; % 设为 false 可关闭页码
+options.Margins.Top = 54;   % 单位磅，示例为 0.75 英寸
+options.Margins.Bottom = 54;
+options.Margins.Left = 72;  % 1 英寸
+options.Margins.Right = 72;
+options.LineSpacing = 1.2;  % 多倍行距
 
-% Generate report (update outputPath to a valid location on your machine)
+% 生成报告（请将输出路径修改为可写目录）
 outputPath = fullfile(pwd, 'demo_report.doc');
 reportTitle = '自动化示例报告';
 
