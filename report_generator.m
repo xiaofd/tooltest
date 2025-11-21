@@ -1,43 +1,40 @@
 function generateWordReport(outputPath, reportTitle, sections, options)
-%GENERATEWORDREPORT Create a professional Word report via COM automation.
-%   generateWordReport(outputPath, reportTitle, sections) opens a hidden
-%   Microsoft Word session using ActiveX and builds a report from the
-%   supplied content. The function is written to be compatible with MATLAB 7
-%   and later (uses only actxserver and basic structs/cell arrays).
+%GENERATEWORDREPORT 使用 COM 自动化生成专业的 Word 报告。
+%   generateWordReport(outputPath, reportTitle, sections) 会通过 ActiveX 打开
+%   一个隐藏的 Microsoft Word 会话，并按给定内容构建报告。为兼容 MATLAB 7
+%   及更高版本，代码仅使用 actxserver 和基础的 struct/cell 数组。
 %
-%   Parameters
-%   ----------
+%   参数
+%   ----
 %   outputPath : char
-%       Full path (including .doc or .docx) where the report is saved.
+%       报告保存的完整路径（包含 .doc 或 .docx）。
 %   reportTitle : char
-%       Main title of the report displayed on the cover page.
+%       封面页展示的主标题。
 %   sections : struct array
-%       Each element may contain the fields:
-%         - Title (char)       : section heading text.
-%         - Paragraphs (cell)  : cell array of paragraph strings.
-%         - Bullets (cell)     : bullet list items (optional).
-%         - Tables (struct)    : optional struct array with fields
-%                                Header (cell) and Rows (cell matrix).
-%         - Figures (struct)   : optional struct array with fields
-%                                Path (char), Caption (char), RowIndex (int).
+%       每个元素可包含以下字段：
+%         - Title (char)       : 章节标题文本。
+%         - Paragraphs (cell)  : 段落字符串的单元格数组。
+%         - Bullets (cell)     : 项目符号列表（可选）。
+%         - Tables (struct)    : 可选的表格结构数组，包含 Header (cell)、Rows (cell 矩阵)。
+%         - Figures (struct)   : 可选的图片结构数组，包含 Path (char)、Caption (char)、RowIndex (int)。
 %   options : struct (optional)
-%       Optional settings to refine the document appearance:
-%         - Template    : path to a .dot/.dotx template file.
-%         - Author      : author name for document properties.
-%         - Company     : company name for document properties.
-%         - FooterText  : footer string printed on each page.
-%         - AddPageNums : logical flag to insert page numbers (default true).
-%         - HeadingFont : struct with Name/Size for headings (defaults Arial/16).
-%         - BodyFont    : struct with Name/Size for body text (Arial/11).
-%         - LineSpacing : multiple line spacing value (e.g., 1.15).
-%         - SpaceBefore : paragraph space before in points (default 6).
-%         - SpaceAfter  : paragraph space after in points (default 6).
-%         - Margins     : struct with Top/Bottom/Left/Right in points (72 = 1");
-%         - TableStyle  : built-in Word table style name (default 'Table Grid').
-%         - Placeholders: struct map of placeholder name -> text/struct payload.
+%       可选设置，用于细化文档外观：
+%         - Template    : .dot/.dotx 模板文件路径。
+%         - Author      : 文档属性中的作者名。
+%         - Company     : 文档属性中的公司名。
+%         - FooterText  : 每页底部的页脚文本。
+%         - AddPageNums : 是否插入页码的逻辑开关（默认 true）。
+%         - HeadingFont : 标题字体的 Name/Size 结构（默认 Arial/16）。
+%         - BodyFont    : 正文字体的 Name/Size 结构（默认 Arial/11）。
+%         - LineSpacing : 多倍行距数值（如 1.15）。
+%         - SpaceBefore : 段前间距，单位为磅（默认 6）。
+%         - SpaceAfter  : 段后间距，单位为磅（默认 6）。
+%         - Margins     : 页边距 Top/Bottom/Left/Right（72 = 1 英寸）。
+%         - TableStyle  : Word 内置表格样式名（默认 'Table Grid'）。
+%         - Placeholders: 占位符名称到文本/结构内容的映射结构。
 %
-%   Example
-%   -------
+%   示例
+%   ----
 %   sections(1).Title = 'Overview';
 %   sections(1).Paragraphs = {'Project background', 'Goals'};
 %   sections(1).Bullets = {'Key milestone A', 'Key milestone B'};
@@ -46,11 +43,10 @@ function generateWordReport(outputPath, reportTitle, sections, options)
 %   sections(2).Tables(1).Rows = {'Throughput', '24 req/s'; 'Latency', '120 ms'};
 %   generateWordReport('C:\\temp\\demo.doc', 'Demo Report', sections);
 %
-%   Notes
-%   -----
-%   * This function requires Microsoft Word to be installed on Windows.
-%   * To keep MATLAB 7 compatibility, the code uses invoke/get/set instead
-%     of newer property accessor syntaxes.
+%   注意事项
+%   -------
+%   * 需要在 Windows 上安装 Microsoft Word。
+%   * 为保持 MATLAB 7 兼容性，使用 invoke/get/set 调用，而非新语法的属性访问。
 
 if nargin < 4 || isempty(options)
     options = struct;
@@ -73,7 +69,7 @@ if ~isfield(options.BodyFont, 'Size')
     options.BodyFont.Size = 11;
 end
 if ~isfield(options, 'LineSpacing')
-    options.LineSpacing = 1.15; % multiple spacing (1 = single)
+    options.LineSpacing = 1.15; % 多倍行距（1 = 单倍）
 end
 if ~isfield(options, 'SpaceBefore')
     options.SpaceBefore = 6;
@@ -85,7 +81,7 @@ if ~isfield(options, 'Margins')
     options.Margins = struct;
 end
 if ~isfield(options.Margins, 'Top')
-    options.Margins.Top = 72; % 1 inch
+    options.Margins.Top = 72; % 1 英寸
 end
 if ~isfield(options.Margins, 'Bottom')
     options.Margins.Bottom = 72;
@@ -101,7 +97,7 @@ if ~isfield(options, 'TableStyle')
 end
 
 word = actxserver('Word.Application');
-set(word, 'Visible', 0);  % keep hidden for automation
+set(word, 'Visible', 0);  % 自动化过程中保持隐藏
 
 try
     doc = createDocument(word, options);
@@ -130,7 +126,7 @@ end
 
 %-------------------------------------------------------------------------%
 function doc = createDocument(word, options)
-%CREATE DOCUMENT Either start from template or blank document.
+%CREATEDOCUMENT 从模板或空白文档创建文档。
 if isfield(options, 'Template') && ~isempty(options.Template) && exist(options.Template, 'file')
     docs = get(word, 'Documents');
     doc = invoke(docs, 'Open', options.Template);
@@ -142,7 +138,7 @@ end
 
 %-------------------------------------------------------------------------%
 function setDocumentProperties(doc, options)
-%SETDOCUMENTPROPERTIES Configure author/company metadata when supplied.
+%SETDOCUMENTPROPERTIES 根据传入内容配置作者/公司属性。
 if isfield(options, 'Author') && ~isempty(options.Author)
     invoke(doc, 'SetProperty', 'Author', options.Author);
 end
@@ -153,7 +149,7 @@ end
 
 %-------------------------------------------------------------------------%
 function configurePageSetup(word, options)
-%CONFIGUREPAGESETUP Apply margin settings to the active document.
+%CONFIGUREPAGESETUP 为当前文档应用页边距设置。
 doc = get(word, 'ActiveDocument');
 pageSetup = get(doc, 'PageSetup');
 set(pageSetup, 'TopMargin', options.Margins.Top);
@@ -164,12 +160,12 @@ end
 
 %-------------------------------------------------------------------------%
 function applyParagraphFormatting(selection, options, alignment)
-%APPLYPARAGRAPHFORMATTING Set alignment, spacing, and line spacing on the selection.
+%APPLYPARAGRAPHFORMATTING 设置选区的对齐、段间距和行距。
 paraFormat = get(selection, 'ParagraphFormat');
 if nargin >= 3
     set(paraFormat, 'Alignment', alignment);
 end
-set(paraFormat, 'LineSpacingRule', 5); % wdLineSpaceMultiple
+    set(paraFormat, 'LineSpacingRule', 5); % wdLineSpaceMultiple（多倍行距）
 set(paraFormat, 'LineSpacing', options.LineSpacing * 12);
 set(paraFormat, 'SpaceBefore', options.SpaceBefore);
 set(paraFormat, 'SpaceAfter', options.SpaceAfter);
@@ -177,11 +173,11 @@ end
 
 %-------------------------------------------------------------------------%
 function addCoverPage(selection, reportTitle, options)
-%ADDCOVERPAGE Simple centered cover page with title and optional footer.
+%ADDCOVERPAGE 创建居中的封面页，包含标题与可选页脚。
     invoke(selection, 'WholeStory');
     invoke(selection, 'Delete');
 
-    applyParagraphFormatting(selection, options, 1); % wdAlignParagraphCenter
+    applyParagraphFormatting(selection, options, 1); % wdAlignParagraphCenter（居中）
     set(selection.Font, 'Name', options.HeadingFont.Name);
     set(selection.Font, 'Size', options.HeadingFont.Size);
     set(selection.Font, 'Bold', 1);
@@ -199,12 +195,12 @@ function addCoverPage(selection, reportTitle, options)
         invoke(selection, 'TypeText', ['Company: ' options.Company]);
         invoke(selection, 'TypeParagraph');
     end
-    invoke(selection, 'InsertBreak', 3); % wdPageBreak
+    invoke(selection, 'InsertBreak', 3); % wdPageBreak（分页符）
 end
 
 %-------------------------------------------------------------------------%
 function addBodyContent(selection, sections, options)
-%ADDBODYCONTENT Iterate over the section structs and emit content.
+%ADDBODYCONTENT 迭代章节结构并生成正文内容。
     if nargin < 2 || isempty(sections)
         return;
     end
@@ -213,7 +209,7 @@ function addBodyContent(selection, sections, options)
         section = sections(k);
 
         if isfield(section, 'Title') && ~isempty(section.Title)
-            applyParagraphFormatting(selection, options, 0); % wdAlignParagraphLeft
+            applyParagraphFormatting(selection, options, 0); % wdAlignParagraphLeft（左对齐）
             set(selection.Font, 'Name', options.HeadingFont.Name);
             set(selection.Font, 'Size', options.HeadingFont.Size);
             set(selection.Font, 'Bold', 1);
@@ -252,13 +248,13 @@ function addBodyContent(selection, sections, options)
             addFigures(selection, section.Figures);
         end
 
-    invoke(selection, 'InsertBreak', 7); % wdSectionBreakContinuous
+    invoke(selection, 'InsertBreak', 7); % wdSectionBreakContinuous（连续分节符）
 end
 end
 
 %-------------------------------------------------------------------------%
 function addTable(selection, tbl, options)
-%ADDTABLE Insert a simple table with optional header row.
+%ADDTABLE 插入带可选表头的简单表格。
 if ~isfield(tbl, 'Rows') || isempty(tbl.Rows)
     return;
 end
@@ -294,16 +290,16 @@ for r = 1:size(tbl.Rows, 1)
     rowIndex = rowIndex + 1;
 end
 
-invoke(wordTable, 'AutoFitBehavior', 2); % wdAutoFitContent
+invoke(wordTable, 'AutoFitBehavior', 2); % wdAutoFitContent（按内容自适应）
 
 rangeAfter = wordTable.Range;
-set(rangeAfter, 'Collapse', 0); % wdCollapseEnd
+set(rangeAfter, 'Collapse', 0); % wdCollapseEnd（折叠至末尾）
 invoke(rangeAfter, 'Select');
 end
 
 %-------------------------------------------------------------------------%
 function addFigures(selection, figures)
-%ADDFIGURES Group figures by row and insert them with captions.
+%ADDFIGURES 按行分组插入图片并添加标题。
 if nargin < 2 || isempty(figures)
     return;
 end
@@ -324,7 +320,7 @@ end
 
 %-------------------------------------------------------------------------%
 function addFigureRow(selection, figureRow)
-%ADDFIGUREROW Lay out a set of figures across a single table row.
+%ADDFIGUREROW 将一组图片排布在单行表格中。
 if isempty(figureRow)
     return;
 end
@@ -340,7 +336,7 @@ for c = 1:numel(figureRow)
     inlineShapes = get(cellRange, 'InlineShapes');
     invoke(inlineShapes, 'AddPicture', figureRow(c).Path, 0, 1);
 
-    set(cellRange, 'Collapse', 0); % wdCollapseEnd
+    set(cellRange, 'Collapse', 0); % wdCollapseEnd（折叠到末尾）
     invoke(cellRange, 'Select');
 
     captionText = '';
@@ -351,21 +347,21 @@ for c = 1:numel(figureRow)
 end
 
 rangeAfter = wordTable.Range;
-set(rangeAfter, 'Collapse', 0); % wdCollapseEnd
+set(rangeAfter, 'Collapse', 0); % wdCollapseEnd（折叠到末尾）
 invoke(rangeAfter, 'Select');
 invoke(selection, 'TypeParagraph');
 end
 
 %-------------------------------------------------------------------------%
 function addFooterAndNumbers(doc, options)
-%ADDFOOTERANDNUMBERS Footer text and page numbers for each section.
+%ADDFOOTERANDNUMBERS 为各节添加页脚文本与页码。
     sections = get(doc, 'Sections');
     count = get(sections, 'Count');
 
 for s = 1:count
     section = invoke(sections, 'Item', s);
     footers = get(section, 'Footers');
-    primaryFooter = invoke(footers, 'Item', 1); % wdHeaderFooterPrimary
+    primaryFooter = invoke(footers, 'Item', 1); % wdHeaderFooterPrimary（主页脚）
     range = get(primaryFooter, 'Range');
 
     if isfield(options, 'FooterText') && ~isempty(options.FooterText)
@@ -374,14 +370,14 @@ for s = 1:count
 
     pageNumbers = get(primaryFooter, 'PageNumbers');
     if options.AddPageNums
-        invoke(pageNumbers, 'Add', 1); % wdAlignPageNumberCenter
+        invoke(pageNumbers, 'Add', 1); % wdAlignPageNumberCenter（页码居中）
     end
 end
 end
 
 %-------------------------------------------------------------------------%
 function replacePlaceholders(doc, options)
-%REPLACEPLACEHOLDERS Swap token text or insert objects after document build.
+%REPLACEPLACEHOLDERS 在生成文档后替换占位符文本或插入对象。
 if ~isfield(options, 'Placeholders') || isempty(options.Placeholders)
     return;
 end
@@ -425,9 +421,9 @@ end
 
 %-------------------------------------------------------------------------%
 function addTableAtRange(range, tbl, options)
-%ADDTABLEATRANGE Insert a table over the supplied range.
+%ADDTABLEATRANGE 在给定范围插入表格。
 set(range, 'Text', '');
-set(range, 'Collapse', 0); % wdCollapseEnd
+set(range, 'Collapse', 0); % wdCollapseEnd（折叠至末尾）
 
 if ~isfield(tbl, 'Rows') || isempty(tbl.Rows)
     return;
@@ -463,23 +459,23 @@ for r = 1:size(tbl.Rows, 1)
     rowIndex = rowIndex + 1;
 end
 
-invoke(wordTable, 'AutoFitBehavior', 2); % wdAutoFitContent
+invoke(wordTable, 'AutoFitBehavior', 2); % wdAutoFitContent（按内容自适应）
 
 rangeAfter = wordTable.Range;
-set(rangeAfter, 'Collapse', 0); % wdCollapseEnd
+set(rangeAfter, 'Collapse', 0); % wdCollapseEnd（折叠至末尾）
 invoke(rangeAfter, 'Select');
 end
 
 %-------------------------------------------------------------------------%
 function addFiguresAtRange(range, figures)
-%ADDFIGURESATRANGE Insert figure row(s) at a placeholder range.
+%ADDFIGURESATRANGE 在占位符范围插入一行或多行图片。
 if nargin < 2 || isempty(figures)
     set(range, 'Text', '');
     return;
 end
 
-set(range, 'Text', '');
-set(range, 'Collapse', 0); % wdCollapseEnd
+    set(range, 'Text', '');
+    set(range, 'Collapse', 0); % wdCollapseEnd（折叠至末尾）
 
 rowIndices = ones(1, numel(figures));
 for idx = 1:numel(figures)
@@ -502,7 +498,7 @@ for r = 1:numel(uniqueRows)
         inlineShapes = get(cellRange, 'InlineShapes');
         invoke(inlineShapes, 'AddPicture', currentFigures(c).Path, 0, 1);
 
-        set(cellRange, 'Collapse', 0); % wdCollapseEnd
+        set(cellRange, 'Collapse', 0); % wdCollapseEnd（折叠至末尾）
         captionText = '';
         if isfield(currentFigures(c), 'Caption') && ~isempty(currentFigures(c).Caption)
             captionText = [' ' currentFigures(c).Caption];
@@ -513,6 +509,6 @@ for r = 1:numel(uniqueRows)
     end
 
     range = wordTable.Range;
-    set(range, 'Collapse', 0); % wdCollapseEnd
+    set(range, 'Collapse', 0); % wdCollapseEnd（折叠至末尾）
 end
 end
