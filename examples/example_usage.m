@@ -7,8 +7,11 @@ sections(1).Title = '项目概览';
 sections(1).Paragraphs = {'本报告由MATLAB自动生成，用于展示样例格式。', ...
     '可根据需要替换为正式内容。'};
 sections(1).Bullets = {'需求梳理完成', '方案评审通过', '关键里程碑已确认'};
-sections(1).Figures = struct('Path', {'C:\\temp\\sample.png'}, ...
-    'Caption', {'示例图片'}, 'RowIndex', {1});
+tempFig = figure('Visible', 'off');
+plot(1:10, rand(1, 10));
+title('动态生成的图形');
+sections(1).Figures = struct('Path', {tempFig}, ...
+    'Caption', {'示例图片（自动导出）'}, 'RowIndex', {1});
 
 sections(2).Title = '数据汇总';
 sections(2).Tables(1).Header = {'指标', '取值'};
@@ -21,7 +24,7 @@ sections(2).Tables(1).Rows = { ...
 options.Placeholders.project_name = '智慧工厂试点';
 options.Placeholders.dynamic_table.Header = {'部门', '负责人'};
 options.Placeholders.dynamic_table.Rows = {'研发部', '李雷'; '交付部', '韩梅'};
-options.Placeholders.dynamic_figures = struct('Path', {'C:\\temp\\logo.png'}, ...
+options.Placeholders.dynamic_figures = struct('FigureHandle', {tempFig}, ...
     'Caption', {'动态插入的图例'}, 'RowIndex', {1});
 
 % 可选配置：模板、页边距、行距、页眉页脚等
@@ -42,3 +45,8 @@ reportTitle = '自动化示例报告';
 
 generateWordReport(outputPath, reportTitle, sections, options);
 fprintf('报告已生成：%s\n', outputPath);
+
+% 清理示例中创建的临时 figure
+if exist('tempFig', 'var') && isgraphics(tempFig)
+    close(tempFig);
+end

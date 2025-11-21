@@ -17,6 +17,8 @@ function generateWordReport(outputPath, reportTitle, sections, options)
 %         - Bullets (cell)     : 项目符号列表（可选）。
 %         - Tables (struct)    : 可选的表格结构数组，包含 Header (cell)、Rows (cell 矩阵)。
 %         - Figures (struct)   : 可选的图片结构数组，包含 Path (char)、Caption (char)、RowIndex (int)。
+%                               Path 可为文件路径，也可直接传入 figure/axes/graphics handle。
+%                               也可使用 FigureHandle 字段显式传入句柄，函数会临时导出图片。
 %   options : struct (optional)
 %       可选设置，用于细化文档外观：
 %         - Template    : .dot/.dotx 模板文件路径。
@@ -304,18 +306,26 @@ if nargin < 2 || isempty(figures)
     return;
 end
 
-rowIndices = ones(1, numel(figures));
-for idx = 1:numel(figures)
-    if isfield(figures(idx), 'RowIndex') && ~isempty(figures(idx).RowIndex)
-        rowIndices(idx) = figures(idx).RowIndex;
-    end
-end
+    [figures, tempFiles] = normalizeFigures(figures);
+    try
+        rowIndices = ones(1, numel(figures));
+        for idx = 1:numel(figures)
+            if isfield(figures(idx), 'RowIndex') && ~isempty(figures(idx).RowIndex)
+                rowIndices(idx) = figures(idx).RowIndex;
+            end
+        end
 
-uniqueRows = unique(rowIndices);
-for r = 1:numel(uniqueRows)
-    currentFigures = figures(rowIndices == uniqueRows(r));
-    addFigureRow(selection, currentFigures);
-end
+        uniqueRows = unique(rowIndices);
+        for r = 1:numel(uniqueRows)
+            currentFigures = figures(rowIndices == uniqueRows(r));
+            addFigureRow(selection, currentFigures);
+        end
+    catch err
+        deleteTempFiles(tempFiles);
+        rethrow(err);
+    end
+
+    deleteTempFiles(tempFiles);
 end
 
 %-------------------------------------------------------------------------%
@@ -400,7 +410,7 @@ for idx = 1:numel(placeholderNames)
         elseif isstruct(payload)
             if isfield(payload, 'Rows')
                 addTableAtRange(searchRange, payload, options);
-            elseif isfield(payload, 'Path') || numel(payload) > 1
+            elseif isfield(payload, 'Path') || isfield(payload, 'FigureHandle') || numel(payload) > 1
                 addFiguresAtRange(searchRange, payload);
             else
                 set(searchRange, 'Text', '');
@@ -474,41 +484,98 @@ if nargin < 2 || isempty(figures)
     return;
 end
 
-    set(range, 'Text', '');
-    set(range, 'Collapse', 0); % wdCollapseEnd（折叠至末尾）
+    [figures, tempFiles] = normalizeFigures(figures);
+    try
+        set(range, 'Text', '');
+        set(range, 'Collapse', 0); % wdCollapseEnd（折叠至末尾）
 
-rowIndices = ones(1, numel(figures));
-for idx = 1:numel(figures)
-    if isfield(figures(idx), 'RowIndex') && ~isempty(figures(idx).RowIndex)
-        rowIndices(idx) = figures(idx).RowIndex;
+        rowIndices = ones(1, numel(figures));
+        for idx = 1:numel(figures)
+            if isfield(figures(idx), 'RowIndex') && ~isempty(figures(idx).RowIndex)
+                rowIndices(idx) = figures(idx).RowIndex;
+            end
+        end
+
+        uniqueRows = unique(rowIndices);
+        for r = 1:numel(uniqueRows)
+            currentFigures = figures(rowIndices == uniqueRows(r));
+
+            tables = get(range, 'Tables');
+            wordTable = invoke(tables, 'Add', range, 1, numel(currentFigures));
+            set(wordTable.Borders, 'Enable', 0);
+
+            for c = 1:numel(currentFigures)
+                cellObj = invoke(wordTable, 'Cell', 1, c);
+                cellRange = get(cellObj, 'Range');
+                inlineShapes = get(cellRange, 'InlineShapes');
+                invoke(inlineShapes, 'AddPicture', currentFigures(c).Path, 0, 1);
+
+                set(cellRange, 'Collapse', 0); % wdCollapseEnd（折叠至末尾）
+                captionText = '';
+                if isfield(currentFigures(c), 'Caption') && ~isempty(currentFigures(c).Caption)
+                    captionText = [' ' currentFigures(c).Caption];
+                end
+                selection = get(get(range, 'Document').Application, 'Selection');
+                invoke(cellRange, 'Select');
+                invoke(selection, 'InsertCaption', 'Figure', captionText);
+            end
+
+            range = wordTable.Range;
+            set(range, 'Collapse', 0); % wdCollapseEnd（折叠至末尾）
+        end
+    catch err
+        deleteTempFiles(tempFiles);
+        rethrow(err);
     end
+
+    deleteTempFiles(tempFiles);
 end
 
-uniqueRows = unique(rowIndices);
-for r = 1:numel(uniqueRows)
-    currentFigures = figures(rowIndices == uniqueRows(r));
+%-------------------------------------------------------------------------%
+function [figures, tempFiles] = normalizeFigures(figures)
+%NORMALIZEFIGURES 确保所有图片项均映射到可读的文件路径。
+tempFiles = {};
+if isempty(figures)
+    return;
+end
 
-    tables = get(range, 'Tables');
-    wordTable = invoke(tables, 'Add', range, 1, numel(currentFigures));
-    set(wordTable.Borders, 'Enable', 0);
+for idx = 1:numel(figures)
+    [figures(idx), tempFiles] = ensureFigurePath(figures(idx), tempFiles);
+end
+end
 
-    for c = 1:numel(currentFigures)
-        cellObj = invoke(wordTable, 'Cell', 1, c);
-        cellRange = get(cellObj, 'Range');
-        inlineShapes = get(cellRange, 'InlineShapes');
-        invoke(inlineShapes, 'AddPicture', currentFigures(c).Path, 0, 1);
+%-------------------------------------------------------------------------%
+function [figStruct, tempFiles] = ensureFigurePath(figStruct, tempFiles)
+%ENSUREFIGUREPATH 将句柄导出为临时图片文件。
+candidateHandle = [];
 
-        set(cellRange, 'Collapse', 0); % wdCollapseEnd（折叠至末尾）
-        captionText = '';
-        if isfield(currentFigures(c), 'Caption') && ~isempty(currentFigures(c).Caption)
-            captionText = [' ' currentFigures(c).Caption];
-        end
-        selection = get(get(range, 'Document').Application, 'Selection');
-        invoke(cellRange, 'Select');
-        invoke(selection, 'InsertCaption', 'Figure', captionText);
+if isfield(figStruct, 'Path') && ~isempty(figStruct.Path) && ~ischar(figStruct.Path)
+    candidateHandle = figStruct.Path;
+elseif isfield(figStruct, 'FigureHandle') && ~isempty(figStruct.FigureHandle)
+    candidateHandle = figStruct.FigureHandle;
+end
+
+if ~isempty(candidateHandle) && isgraphics(candidateHandle)
+    figHandle = candidateHandle;
+    if ~strcmpi(get(figHandle, 'Type'), 'figure')
+        figHandle = ancestor(figHandle, 'figure');
     end
 
-    range = wordTable.Range;
-    set(range, 'Collapse', 0); % wdCollapseEnd（折叠至末尾）
+    if ~isempty(figHandle) && isgraphics(figHandle)
+        tempPath = [tempname '.png'];
+        print(figHandle, '-dpng', tempPath);
+        figStruct.Path = tempPath;
+        tempFiles{end + 1} = tempPath;
+    end
+end
+end
+
+%-------------------------------------------------------------------------%
+function deleteTempFiles(tempFiles)
+%DELETETEMPFILES 删除导出的临时图片。
+for idx = 1:numel(tempFiles)
+    if exist(tempFiles{idx}, 'file')
+        delete(tempFiles{idx});
+    end
 end
 end
