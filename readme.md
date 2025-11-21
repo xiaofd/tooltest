@@ -10,16 +10,32 @@
 ## 快速开始
 1. 确保在 Windows 环境并安装了 Microsoft Word。
 2. 将仓库中的 `report_generator.m` 添加到 MATLAB 路径。
-3. 根据 `examples/example_usage.m` 构造章节与选项，运行脚本即可生成 `.doc` 报告。
+3. 根据 `examples/example_usage.m` 构造章节、占位符与选项，运行脚本即可生成 `.doc` 报告。
 
 ```matlab
-% 片段示例
-sections(1).Title = 'Overview';
-sections(1).Paragraphs = {'Project background', 'Goals'};
-options.Author = 'Auto Script';
+% 基础片段示例（字段均可直接复制运行）
+sections(1).Title = '项目概览';
+sections(1).Paragraphs = {'项目背景', '目标'};
+sections(1).Bullets = {'需求梳理完成', '方案评审通过'};
+
+options.Template = 'C:\\temp\\report_template.dotx';
+options.Author = '自动化脚本';
+options.Company = '示例团队';
+options.FooterText = '仅供内部审阅';
+options.AddPageNums = false; % 需要页码时设为 true
+
+% 在模板中放置 {{project_name}} / {{dynamic_table}} / {{dynamic_figures}} 即可替换
+options.Placeholders.project_name = '智慧工厂试点';
+options.Placeholders.dynamic_table.Header = {'部门', '负责人'};
+options.Placeholders.dynamic_table.Rows = {'研发部', '李雷'; '交付部', '韩梅'};
+options.Placeholders.dynamic_figures = struct('Path', {'C:\\temp\\logo.png'}, ...
+    'Caption', {'动态插入的图例'}, 'RowIndex', {1});
+
 outputPath = 'C:\\temp\\demo_report.doc';
-generateWordReport(outputPath, 'Demo Report', sections, options);
+generateWordReport(outputPath, '自动化示例报告', sections, options);
 ```
+
+使用模板时请确保 `.dot/.dotx` 路径可访问；若不需要页脚或页码可分别清空 `FooterText` 或将 `AddPageNums` 设为 `false`。在 Word 模板中放置形如 `{{占位符名}}` 的标记，即可由 `Placeholders` 结构替换为动态文本、表格或图片。
 
 ## 兼容性注意
 - 代码仅使用 `invoke`/`get`/`set`，避免类定义等现代特性，以保持 MATLAB 7 可运行。
