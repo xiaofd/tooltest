@@ -34,6 +34,7 @@ function generateWordReport(outputPath, reportTitle, sections, options)
 %         - SpaceAfter  : paragraph space after in points (default 6).
 %         - Margins     : struct with Top/Bottom/Left/Right in points (72 = 1");
 %         - TableStyle  : built-in Word table style name (default 'Table Grid').
+%         - Placeholders: struct map of placeholder name -> text/struct payload.
 %
 %   Example
 %   -------
@@ -111,6 +112,7 @@ try
     addCoverPage(selection, reportTitle, options);
     addBodyContent(selection, sections, options);
     addFooterAndNumbers(doc, options);
+    replacePlaceholders(doc, options);
 
     invoke(doc, 'SaveAs', outputPath);
 catch err
@@ -357,8 +359,8 @@ end
 %-------------------------------------------------------------------------%
 function addFooterAndNumbers(doc, options)
 %ADDFOOTERANDNUMBERS Footer text and page numbers for each section.
-sections = get(doc, 'Sections');
-count = get(sections, 'Count');
+    sections = get(doc, 'Sections');
+    count = get(sections, 'Count');
 
 for s = 1:count
     section = invoke(sections, 'Item', s);
@@ -374,5 +376,143 @@ for s = 1:count
     if options.AddPageNums
         invoke(pageNumbers, 'Add', 1); % wdAlignPageNumberCenter
     end
+end
+end
+
+%-------------------------------------------------------------------------%
+function replacePlaceholders(doc, options)
+%REPLACEPLACEHOLDERS Swap token text or insert objects after document build.
+if ~isfield(options, 'Placeholders') || isempty(options.Placeholders)
+    return;
+end
+
+placeholderNames = fieldnames(options.Placeholders);
+
+for idx = 1:numel(placeholderNames)
+    name = placeholderNames{idx};
+    token = ['{{' name '}}'];
+    payload = options.Placeholders.(name);
+
+    searchRange = get(doc, 'Content');
+    findObj = get(searchRange, 'Find');
+    set(findObj, 'Forward', 1);
+    set(findObj, 'Format', 0);
+
+    while invoke(findObj, 'Execute', token, 0, 0, 0, 0, 0, 1, 1, 0, '', 0)
+        if ischar(payload)
+            set(searchRange, 'Text', payload);
+        elseif isstruct(payload)
+            if isfield(payload, 'Rows')
+                addTableAtRange(searchRange, payload, options);
+            elseif isfield(payload, 'Path') || numel(payload) > 1
+                addFiguresAtRange(searchRange, payload);
+            else
+                set(searchRange, 'Text', '');
+            end
+        else
+            set(searchRange, 'Text', '');
+        end
+
+        startPos = get(searchRange, 'End');
+        docContent = get(doc, 'Content');
+        searchRange = invoke(doc, 'Range', startPos, get(docContent, 'End'));
+        findObj = get(searchRange, 'Find');
+        set(findObj, 'Forward', 1);
+        set(findObj, 'Format', 0);
+    end
+end
+end
+
+%-------------------------------------------------------------------------%
+function addTableAtRange(range, tbl, options)
+%ADDTABLEATRANGE Insert a table over the supplied range.
+set(range, 'Text', '');
+set(range, 'Collapse', 0); % wdCollapseEnd
+
+if ~isfield(tbl, 'Rows') || isempty(tbl.Rows)
+    return;
+end
+
+rows = size(tbl.Rows, 1);
+cols = size(tbl.Rows, 2);
+if isfield(tbl, 'Header') && ~isempty(tbl.Header)
+    rows = rows + 1;
+end
+
+tables = get(range, 'Tables');
+wordTable = invoke(tables, 'Add', range, rows, cols);
+set(wordTable, 'Style', options.TableStyle);
+set(wordTable.Range.Font, 'Name', options.BodyFont.Name);
+set(wordTable.Range.Font, 'Size', options.BodyFont.Size);
+
+rowIndex = 1;
+if isfield(tbl, 'Header') && ~isempty(tbl.Header)
+    for c = 1:cols
+        cellObj = invoke(wordTable, 'Cell', rowIndex, c);
+        invoke(cellObj, 'Range', 'Text', tbl.Header{c});
+        set(cellObj.Range.Font, 'Bold', 1);
+    end
+    rowIndex = rowIndex + 1;
+end
+
+for r = 1:size(tbl.Rows, 1)
+    for c = 1:cols
+        cellObj = invoke(wordTable, 'Cell', rowIndex, c);
+        invoke(cellObj, 'Range', 'Text', tbl.Rows{r, c});
+    end
+    rowIndex = rowIndex + 1;
+end
+
+invoke(wordTable, 'AutoFitBehavior', 2); % wdAutoFitContent
+
+rangeAfter = wordTable.Range;
+set(rangeAfter, 'Collapse', 0); % wdCollapseEnd
+invoke(rangeAfter, 'Select');
+end
+
+%-------------------------------------------------------------------------%
+function addFiguresAtRange(range, figures)
+%ADDFIGURESATRANGE Insert figure row(s) at a placeholder range.
+if nargin < 2 || isempty(figures)
+    set(range, 'Text', '');
+    return;
+end
+
+set(range, 'Text', '');
+set(range, 'Collapse', 0); % wdCollapseEnd
+
+rowIndices = ones(1, numel(figures));
+for idx = 1:numel(figures)
+    if isfield(figures(idx), 'RowIndex') && ~isempty(figures(idx).RowIndex)
+        rowIndices(idx) = figures(idx).RowIndex;
+    end
+end
+
+uniqueRows = unique(rowIndices);
+for r = 1:numel(uniqueRows)
+    currentFigures = figures(rowIndices == uniqueRows(r));
+
+    tables = get(range, 'Tables');
+    wordTable = invoke(tables, 'Add', range, 1, numel(currentFigures));
+    set(wordTable.Borders, 'Enable', 0);
+
+    for c = 1:numel(currentFigures)
+        cellObj = invoke(wordTable, 'Cell', 1, c);
+        cellRange = get(cellObj, 'Range');
+        inlineShapes = get(cellRange, 'InlineShapes');
+        invoke(inlineShapes, 'AddPicture', currentFigures(c).Path, 0, 1);
+
+        set(cellRange, 'Collapse', 0); % wdCollapseEnd
+        captionText = '';
+        if isfield(currentFigures(c), 'Caption') && ~isempty(currentFigures(c).Caption)
+            captionText = [' ' currentFigures(c).Caption];
+        end
+        selection = get(get(range, 'Document').Application, 'Selection');
+        invoke(cellRange, 'Select');
+        invoke(selection, 'InsertCaption', 'Figure', captionText);
+    end
+
+    range = wordTable.Range;
+    set(range, 'Collapse', 0); % wdCollapseEnd
 end
 end
