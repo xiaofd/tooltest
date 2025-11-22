@@ -1,6 +1,6 @@
 # MATLAB Word 报告生成模板
 
-该仓库提供一组兼容 MATLAB 7 及以上版本的基础脚本，通过 Windows 上的 ActiveX/COM 自动化生成专业的 Microsoft Word 报告。
+该仓库提供一组兼容 MATLAB 7 及以上版本的基础脚本，通过 Windows 上的 ActiveX/COM 自动化生成专业的 Microsoft Word 报告。此外，新增了 Python 3.8 版本的实现，同样依赖 Windows + Word + COM 自动化，额外依赖仅为 `pywin32`。
 
 ## 功能概览
 - 通过 `actxserver('Word.Application')` 控制 Word，保证在 MATLAB 7 时代的语法兼容性。
@@ -42,5 +42,7 @@ generateWordReport(outputPath, '自动化示例报告', sections, options);
 - 若使用模板文件，请确保路径有效且 Word 能够访问对应格式。
 
 ## 目录说明
-- `report_generator.m`：核心函数，负责生成报告。
-- `examples/example_usage.m`：示例脚本，可直接运行体验效果。
+- `report_generator.m`：MATLAB 核心函数，负责生成报告。
+- `examples/example_usage.m`：MATLAB 示例脚本，可直接运行体验效果。
+- `report_generator.py`：Python 3.8 版本，使用 `win32com` 生成报告。
+- `examples/example_usage.py`：Python 示例脚本（需要安装 `pywin32`）。
