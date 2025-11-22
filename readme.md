@@ -42,7 +42,9 @@ generateWordReport(outputPath, '自动化示例报告', sections, options);
 - 若使用模板文件，请确保路径有效且 Word 能够访问对应格式。
 
 ## 目录说明
-- `report_generator.m`：MATLAB 核心函数，负责生成报告。
+- `report_generator.m`：MATLAB 核心函数，负责生成 Word 报告。
+- `generateHtmlReport.m`：MATLAB 版 HTML 报告生成器，输出带行内样式的 IE11 兼容 HTML。
 - `examples/example_usage.m`：MATLAB 示例脚本，可直接运行体验效果。
+- `examples/example_html_usage.m`：MATLAB HTML 示例脚本。
 - `report_generator.py`：Python 3.8 版本，使用 `win32com` 生成报告。
 - `examples/example_usage.py`：Python 示例脚本（需要安装 `pywin32`）。
