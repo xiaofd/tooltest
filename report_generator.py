@@ -10,13 +10,9 @@ from __future__ import annotations
 import os
 import tempfile
 from typing import Any, Dict, Iterable, List, Optional
-
-try:
-    from win32com.client import Dispatch
-except ImportError as exc:  # pragma: no cover - runtime dependency check
-    raise RuntimeError(
-        "pywin32 (win32com) is required to control Microsoft Word via COM"
-    ) from exc
+import base64
+import html
+import importlib.util
 
 
 # Word constant values (avoids importing win32com constants module)
@@ -29,6 +25,19 @@ WD_HEADER_FOOTER_PRIMARY = 1
 WD_ALIGN_PAGE_NUMBER_CENTER = 1
 WD_AUTO_FIT_CONTENT = 2
 WD_COLLAPSE_END = 0
+TABLE_BORDER_STYLE = "1px solid #999"
+
+
+def _get_dispatch():
+    spec = importlib.util.find_spec("win32com.client")
+    if spec is None:
+        raise RuntimeError(
+            "pywin32 (win32com) is required to control Microsoft Word via COM"
+        )
+
+    from win32com.client import Dispatch  # type: ignore
+
+    return Dispatch
 
 
 def generate_word_report(
@@ -49,6 +58,7 @@ def generate_word_report(
 
     options = _merge_options(options)
 
+    Dispatch = _get_dispatch()
     word = Dispatch("Word.Application")
     word.Visible = False
     doc = None
@@ -414,4 +424,219 @@ def _delete_temp_files(temp_files: List[str]) -> None:
             pass
 
 
-__all__ = ["generate_word_report"]
+def generate_html_report(
+    output_path: str,
+    report_title: str,
+    sections: Iterable[Dict[str, Any]],
+    options: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Generate an HTML report using the same schema as ``generate_word_report``.
+
+    The function mirrors the section/option structure used for the Word export
+    but produces a UTF-8 encoded ``.html`` file. Images are normalized to
+    absolute paths or embedded as base64 data URIs when ``EmbedImages`` is set
+    (globally or per-figure with ``Embed``).
+    """
+
+    options = _merge_options(options)
+    sections = list(sections)
+
+    html_parts: List[str] = [
+        "<!DOCTYPE html>",
+        "<html lang=\"zh-CN\">",
+        "<head>",
+        "<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">",
+        "<meta charset=\"UTF-8\">",
+        f"<title>{html.escape(report_title)}</title>",
+        "</head>",
+    ]
+
+    root_style = _build_root_style(options)
+    html_parts.append(f"<body style=\"{root_style}\">")
+
+    html_parts.append(_render_cover_page(report_title, options))
+    for section in sections:
+        html_parts.append(_render_section(section, options))
+
+    final_html = _replace_placeholders_html("".join(html_parts) + "</body></html>", options)
+
+    with open(output_path, "w", encoding="utf-8") as fp:
+        fp.write(final_html)
+
+
+def _build_root_style(options: Dict[str, Any]) -> str:
+    body_font = options["BodyFont"]
+    styles = [
+        f"font-family:{body_font['Name']}, sans-serif",
+        f"font-size:{body_font['Size']}pt",
+        f"line-height:{options['LineSpacing']}",
+        "margin:16px",
+        "-ms-text-size-adjust:100%",
+    ]
+    return "; ".join(styles)
+
+
+def _render_cover_page(report_title: str, options: Dict[str, Any]) -> str:
+    heading_font = options["HeadingFont"]
+    body_font = options["BodyFont"]
+    parts = ["<section style=\"text-align:center; page-break-after:always;\">"]
+    parts.append(
+        f"<h1 style=\"font-family:{heading_font['Name']}, sans-serif; font-size:{heading_font['Size']}pt; margin:24px 0;\">{html.escape(report_title)}"  # noqa: E501
+        "</h1>"
+    )
+
+    if options.get("Author"):
+        parts.append(
+            f"<p style=\"font-family:{body_font['Name']}, sans-serif; font-size:{body_font['Size']}pt;\">"
+            f"作者：{html.escape(str(options['Author']))}</p>"
+        )
+    if options.get("Company"):
+        parts.append(
+            f"<p style=\"font-family:{body_font['Name']}, sans-serif; font-size:{body_font['Size']}pt;\">"
+            f"单位：{html.escape(str(options['Company']))}</p>"
+        )
+
+    parts.append("</section>")
+    return "".join(parts)
+
+
+def _render_section(section: Dict[str, Any], options: Dict[str, Any]) -> str:
+    heading_font = options["HeadingFont"]
+    body_font = options["BodyFont"]
+    html_chunks: List[str] = ["<section style=\"margin-bottom:24px;\">"]
+
+    title = section.get("Title")
+    if title:
+        html_chunks.append(
+            f"<h2 style=\"font-family:{heading_font['Name']}, sans-serif; font-size:{heading_font['Size']}pt; margin:12px 0;\">{html.escape(str(title))}</h2>"
+        )
+
+    for paragraph in section.get("Paragraphs", []) or []:
+        text = _escape_or_placeholder(paragraph, options)
+        html_chunks.append(
+            f"<p style=\"font-family:{body_font['Name']}, sans-serif; font-size:{body_font['Size']}pt; margin:8px 0;\">{text}</p>"
+        )
+
+    bullets = section.get("Bullets", []) or []
+    if bullets:
+        html_chunks.append(
+            f"<ul style=\"font-family:{body_font['Name']}, sans-serif; font-size:{body_font['Size']}pt; margin:8px 0 16px 20px;\">"
+        )
+        for bullet in bullets:
+            html_chunks.append(f"<li>{_escape_or_placeholder(bullet, options)}</li>")
+        html_chunks.append("</ul>")
+
+    for table in section.get("Tables", []) or []:
+        html_chunks.append(_render_table(table, options))
+
+    figures = section.get("Figures")
+    if figures:
+        html_chunks.append(_render_figures(figures, options))
+
+    html_chunks.append("</section>")
+    return "".join(html_chunks)
+
+
+def _render_table(table_def: Dict[str, Any], options: Dict[str, Any]) -> str:
+    rows_data = table_def.get("Rows")
+    if not rows_data:
+        return ""
+
+    body_font = options["BodyFont"]
+    header = table_def.get("Header") or []
+    cell_style = (
+        f"border: {TABLE_BORDER_STYLE}; padding:6px; "
+        f"font-family:{body_font['Name']}, sans-serif; font-size:{body_font['Size']}pt;"
+    )
+    table_style = f"border-collapse:collapse; width:100%; margin:12px 0; border: {TABLE_BORDER_STYLE};"
+
+    html_table: List[str] = [f"<table style=\"{table_style}\">"]
+    if header:
+        html_table.append("<thead><tr>")
+        for value in header:
+            html_table.append(f"<th style=\"{cell_style}; font-weight:bold;\">{html.escape(str(value))}</th>")
+        html_table.append("</tr></thead>")
+
+    html_table.append("<tbody>")
+    for row_values in rows_data:
+        html_table.append("<tr>")
+        for value in row_values:
+            html_table.append(f"<td style=\"{cell_style}\">{html.escape(str(value))}</td>")
+        html_table.append("</tr>")
+    html_table.append("</tbody></table>")
+    return "".join(html_table)
+
+
+def _render_figures(figures: Iterable[Dict[str, Any]], options: Dict[str, Any]) -> str:
+    normalized, temp_files = _normalize_figures(figures)
+    parts: List[str] = []
+    try:
+        row_indices = [fig.get("RowIndex", 1) or 1 for fig in normalized]
+        for row in sorted(set(row_indices)):
+            row_figures = [fig for fig, idx in zip(normalized, row_indices) if idx == row]
+            parts.append(_render_figure_row(row_figures, options))
+    finally:
+        _delete_temp_files(temp_files)
+    return "".join(parts)
+
+
+def _render_figure_row(figure_row: List[Dict[str, Any]], options: Dict[str, Any]) -> str:
+    if not figure_row:
+        return ""
+
+    cells: List[str] = ["<tr>"]
+    for fig in figure_row:
+        src = _figure_src(fig, options)
+        caption = html.escape(str(fig.get("Caption", ""))) if fig.get("Caption") else ""
+        img_tag = f"<img src=\"{src}\" alt=\"{caption}\" style=\"max-width:100%; height:auto; display:block; margin:auto;\">"
+        caption_tag = f"<div style=\"text-align:center; margin-top:6px;\">{caption}</div>" if caption else ""
+        cell_style = f"padding:8px; text-align:center; border:{TABLE_BORDER_STYLE};"
+        cells.append(f"<td style=\"{cell_style}\">{img_tag}{caption_tag}</td>")
+    cells.append("</tr>")
+
+    table_style = f"border-collapse:collapse; width:100%; margin:12px 0; border: {TABLE_BORDER_STYLE};"
+    return f"<table style=\"{table_style}\"><tbody>{''.join(cells)}</tbody></table>"
+
+
+def _figure_src(fig: Dict[str, Any], options: Dict[str, Any]) -> str:
+    embed = fig.get("Embed", options.get("EmbedImages", False))
+    path = fig.get("Path")
+    if not path:
+        return ""
+    if embed:
+        with open(path, "rb") as fp:
+            encoded = base64.b64encode(fp.read()).decode("ascii")
+        mime = "image/png" if path.lower().endswith(".png") else "image/jpeg"
+        return f"data:{mime};base64,{encoded}"
+    return path
+
+
+def _escape_or_placeholder(value: Any, options: Dict[str, Any]) -> str:
+    text = str(value)
+    placeholders = options.get("Placeholders") or {}
+    if text.startswith("{{") and text.endswith("}}") and text[2:-2] in placeholders:
+        return _render_placeholder(text[2:-2], placeholders[text[2:-2]], options)
+    return html.escape(text)
+
+
+def _render_placeholder(name: str, payload: Any, options: Dict[str, Any]) -> str:
+    if isinstance(payload, str):
+        return html.escape(payload)
+    if isinstance(payload, dict):
+        if payload.get("Rows"):
+            return _render_table(payload, options)
+        if payload.get("Path") or len(payload) > 1:
+            return _render_figures([payload], options)
+    return ""
+
+
+def _replace_placeholders_html(content: str, options: Dict[str, Any]) -> str:
+    placeholders = options.get("Placeholders") or {}
+    for name, payload in placeholders.items():
+        token = f"{{{{{name}}}}}"
+        rendered = _render_placeholder(name, payload, options)
+        content = content.replace(token, rendered)
+    return content
+
+
+__all__ = ["generate_word_report", "generate_html_report"]
