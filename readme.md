@@ -48,3 +48,11 @@ generateWordReport(outputPath, '自动化示例报告', sections, options);
 - `examples/example_html_usage.m`：MATLAB HTML 示例脚本。
 - `report_generator.py`：Python 3.8 版本，使用 `win32com` 生成报告。
 - `examples/example_usage.py`：Python 示例脚本（需要安装 `pywin32`）。
+
+## GUI launcher
+`gui_report_launcher.m` 提供了一个 MATLAB 7 兼容的 GUI 入口，可通过左侧文件列表/模式切换查看 HTML 报告或图像/figure。使用要点：
+
+- 界面仅依赖传统 `figure`、`uicontrol`、`uitabgroup` 与 `axes`，可在 MATLAB 7 环境运行。
+- HTML 预览优先尝试 `uihtml`/Java 组件，不可用时回退为多行 `uicontrol('style','edit')`。
+- 调用 `launchReportGui(options)` 即可启动；`examples/example_gui_usage.m` 展示了生成 HTML + 图像并加载 GUI 的完整流程。
+- 若有自定义图像加载需求，可在 `options.FigureLoader` 中传入接受 `(axesHandle, filePath)` 的函数句柄。
